@@ -6,7 +6,7 @@ build/
 !**/src/test/**/build/
 
 ## ignore
-config/
+/config/
 
 !com/sp/app/config/
 !com/sp/app/config/**
