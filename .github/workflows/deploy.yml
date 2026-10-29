@@ -10,9 +10,9 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
 
     env:
-      APP_NAME: myapp
-      JAR_NAME: my-app-0.0.1-SNAPSHOT.jar
       APP_DIR: /opt/myapp
+      IMAGE_NAME: myapp:latest
+      CONTAINER_NAME: myapp
 
     steps:
     # 소스 코드 체크아웃
@@ -40,29 +40,39 @@ jobs:
           ~/.gradle/wrapper
         key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-    # gradle 빌드
+    # Spring Boot gradle 빌드
     - name: Build application
       run: ./gradlew clean build -x test
 
-    # 파일 이동
-    - name: Move JAR file to target directory
-      run: | 
-         rm -f $APP_DIR/*.jar
-         mv $(ls build/libs/*.jar | grep -v 'plain.jar') $APP_DIR/$JAR_NAME
-
-    # 애플리케이션 재시작
-    - name: Restart application
-      shell: bash
+    # Docker 이미지 생성
+    - name: Build Docker image
       run: |
-         set -euo pipefail
+        docker build \
+          --pull \
+          -t "$IMAGE_NAME" \
+          .
 
-         echo "Step 1: Restart service"
-         sudo -n /usr/bin/systemctl restart "$APP_NAME"
+    # 기존 컨테이너 제거 후 새 컨테이너 실행
+    - name: Deploy Docker container
+      run: |
+        docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
-         echo "Step 2: Check service"
-         sudo -n /usr/bin/systemctl is-active --quiet "$APP_NAME"
+        docker run -d \
+          --name "$CONTAINER_NAME" \
+          --restart unless-stopped \
+          -p 9091:9091 \
+          -v "$APP_DIR/config:/app/config:ro" \
+          "$IMAGE_NAME"
 
-         echo "Step 3: Show service status"
-         sudo -n /usr/bin/systemctl --no-pager --full status "$APP_NAME"
+    # 컨테이너 실행 상태 확인
+    - name: Verify deployment
+      run: |
+        sleep 10
 
-         echo "Deployment completed successfully."
+        if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME")" != "true" ]; then
+          docker logs "$CONTAINER_NAME" || true
+          exit 1
+        fi
+
+        docker ps --filter "name=$CONTAINER_NAME"
+        docker logs --tail 100 "$CONTAINER_NAME"
