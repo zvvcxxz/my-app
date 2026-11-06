@@ -4,7 +4,7 @@ pipeline {
     environment {
       IMAGE_NAME = "my-app"
       CONTAINER_NAME = "my-app-container"
-      APP_YML_FILE = 'APPLICATION_YML_FILE'
+      APP_YML_FILE = 'APPLICATION_YML_TEST'
     }
     
     stages {
